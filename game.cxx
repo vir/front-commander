@@ -17,6 +17,10 @@
  * (привычки) и отсутствие необходимости. Возможно, в следующей версии,
  * попробую переделать части на boost.
  *
+ * Для запуска на Windows нужно использовать консоль с кодировкаой UTF-8
+ * (например, Git bash here из последнего Git for windows) либо перед
+ * сборкой перекодировать все файлы в CP866.
+ *
  * Куда можно двигаться:
  *  - сделать вывод через объект UserInterface
  *  - растащить исходник на несколько файлов .h и .cxx
@@ -456,7 +460,7 @@ static void usage(const char* err = nullptr)
 	std::ostream& s = err ? std::clog : std::cout;
 	if(err)
 		s << err << std::endl;
-	s << "Usage:\n\tgame -h\t--- this help\n\tgame file1.army file2.army\t--- load army files\n\tgame -a\t--- load *.army files\n";
+	s << "Usage:\n\tgame -h\t--- this help\n\tgame file1.army file2.army\t--- load army files\n\n";
 }
 int main(int argc, const char* argv[])
 {
