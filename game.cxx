@@ -13,17 +13,11 @@
 #endif
 
 #include <locale>
-#include <iostream>
 #include <boost/locale.hpp>
 #include <boost/locale/collator.hpp>
 
 
-
 /*
- *
- * Тут "чистый" C++11, никакого boostа. Причина тому - отсутствие опыта
- * (привычки) и отсутствие необходимости. Возможно, в следующей версии,
- * попробую переделать части на boost.
  *
  * Для запуска на Windows нужно использовать консоль с кодировкаой UTF-8
  * (например, Git bash here из последнего Git for windows) либо перед
@@ -34,7 +28,6 @@
  *  - растащить исходник на несколько файлов .h и .cxx
  *  - написать документацию к классам
  *  - сделать алиасы командам
- *  - сделать команды и названия регистронезависимыми (locale?)
  *  - переделать токенизатор команды (boost)
  *  - сделать загрузку всех файлов армий из каталога (boost filesystem?)
  * Куда можно двигаться дальше:
@@ -412,7 +405,7 @@ public:
 		UserInterface& ui = UserInterface::instance();
 		std::cout << "Welcome!" << std::endl;
 		help();
-		ui.prompt("Command? > ");
+		ui.prompt("Команда? > ");
 
 		Command cmd;
 		while(ui.good())
@@ -420,7 +413,7 @@ public:
 			std::string s = ui.get_command();
 			if(s.empty())
 				continue;
-			if(s == "?")
+			if(s == "?" || ieq(s, "help") || ieq(s, "wtf"))
 			{
 				help();
 				continue;
@@ -457,11 +450,11 @@ public:
 protected:
 	void help()
 	{
-		std::cout << "General commands:" << std::endl
-			<< "? for help" << std::endl
-			<< "exit to leave this excellent game" << std::endl
+		std::cout << "Общие команды:" << std::endl
+			<< "'?' или 'help' - эта небольшая подсказка" << std::endl
+			<< "'exit' или 'выход' или просто 'q' - он самый, выход" << std::endl
 			<< std::endl;
-		std::cout << "Unit controlling commands:" << std::endl
+		std::cout << "Управление войсками:" << std::endl
 			<< "<имя> <команда> - управление одной боевой единицей" << std::endl
 			<< "все <команда> - скомандовать всем бевым единицам" << std::endl
 			<< "армия <армия> <команда> - скомандовать всей армии <армия>" << std::endl
