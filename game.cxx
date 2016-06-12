@@ -10,6 +10,9 @@
 # include <readline/readline.h>
 # include <readline/history.h>
 #endif
+#ifdef _WIN32
+# include <Windows.h>
+#endif
 
 /*
  *
@@ -230,6 +233,18 @@ private:
 	UserInterface()
 		: m_good(true)
 	{
+#ifdef _WIN32
+		// Save old codepage and set new code page to UTF-8
+		m_oldInputCodePage = ::GetConsoleCP();
+		m_oldOutputCodePage = ::GetConsoleOutputCP();
+		::SetConsoleCP(65001);
+		::SetConsoleOutputCP(65001);
+	}
+	~UserInterface()
+	{
+		::SetConsoleCP(m_oldInputCodePage);
+		::SetConsoleOutputCP(m_oldOutputCodePage);
+#endif /* _WIN32 */
 	}
 public:
 	static UserInterface& instance()
@@ -268,6 +283,9 @@ public:
 private:
 	bool m_good;
 	std::string m_prompt;
+#ifdef _WIN32
+	UINT m_oldInputCodePage, m_oldOutputCodePage;
+#endif
 };
 
 class Tokenizer
