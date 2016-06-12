@@ -5,6 +5,10 @@ ifneq (,$(wildcard /usr/include/readline/readline.h))
 CXXFLAGS+=-DHAVE_READLINE
 LDFLAGS+=-lreadline
 endif
+ifneq (,$(wildcard /usr/include/boost/locale.hpp))
+CXXDLAGS+=-DHAVE_BOOST_LOCALE
+LDFLAGS+=-lboost_locale
+endif
 
 all: game
 

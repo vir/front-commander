@@ -6,30 +6,28 @@
 #include <memory>
 #include <set>
 #include <sstream>
+#include <system_error>
 #ifdef HAVE_READLINE
 # include <readline/readline.h>
 # include <readline/history.h>
 #endif
 #ifdef _WIN32
 # include <Windows.h>
+# include    <io.h>      // _setmode, _fileno
+# include    <fcntl.h>   // _O_U8TEXT
+#endif
+#ifdef HAVE_BOOST_LOCALE
+# include <locale>
+# include <boost/locale.hpp>
+# include <boost/locale/collator.hpp>
 #endif
 
 /*
  *
- * Тут "чистый" C++11, никакого boostа. Причина тому - отсутствие опыта
- * (привычки) и отсутствие необходимости. Возможно, в следующей версии,
- * попробую переделать части на boost.
- *
- * Для запуска на Windows нужно использовать консоль с кодировкаой UTF-8
- * (например, Git bash here из последнего Git for windows) либо перед
- * сборкой перекодировать все файлы в CP866.
- *
  * Куда можно двигаться:
- *  - сделать вывод через объект UserInterface
  *  - растащить исходник на несколько файлов .h и .cxx
  *  - написать документацию к классам
  *  - сделать алиасы командам
- *  - сделать команды и названия регистронезависимыми (locale?)
  *  - переделать токенизатор команды (boost)
  *  - сделать загрузку всех файлов армий из каталога (boost filesystem?)
  * Куда можно двигаться дальше:
@@ -41,6 +39,136 @@
  *
  */
 
+bool ieq(const std::string& s1, const std::string& s2)
+{
+#ifdef HAVE_BOOST_LOCALE
+	using namespace std;
+	using namespace boost::locale;
+	static generator gen;
+	static locale loc = gen("ru_RU.UTF-8");
+	int res = use_facet<collator<char> >(loc).compare(collator_base::primary, s1, s2);
+	return res == 0;
+#else
+	return s1 == s2;
+#endif
+}
+
+class UserInterface
+{
+private:
+	UserInterface()
+		: m_good(true)
+	{
+#ifdef _WIN32
+		// Save old codepage and set new code page to UTF-8
+		m_oldOutputCodePage = ::GetConsoleOutputCP();
+		::SetConsoleOutputCP(65001);
+
+		// different hack for input
+		m_inputHandle = ::GetStdHandle( STD_INPUT_HANDLE );
+		DWORD consoleMode;
+		m_inputIsFromConsole = !! ::GetConsoleMode( m_inputHandle, &consoleMode );
+		_setmode( _fileno( stdin ), _O_U8TEXT );
+	}
+	~UserInterface()
+	{
+		::SetConsoleOutputCP(m_oldOutputCodePage);
+#endif /* _WIN32 */
+	}
+public:
+	static UserInterface& instance()
+	{
+		static UserInterface self;
+		return self;
+	}
+	bool good() const
+	{
+		return m_good;
+	}
+	void prompt(const char* prompt)
+	{
+		m_prompt = prompt;
+	}
+	std::string get_command()
+	{
+		std::string r;
+#ifdef HAVE_READLINE
+		char* p = readline(m_prompt.c_str());
+		if(p)
+		{
+			r = p;
+			free(p);
+		}
+		else
+			m_good = false;
+#elif defined _WIN32
+		wchar_t buf[1024];
+		char buf2[2048];
+		int len = -1;
+		*this << m_prompt;
+		if(m_inputIsFromConsole)
+		{
+			DWORD nCharactersRead = 0;
+			bool const readSucceeded = !! ::ReadConsoleW(m_inputHandle, buf, static_cast< DWORD >( sizeof(buf)/sizeof(buf[0]) ), &nCharactersRead, nullptr);
+			if( ! readSucceeded )
+			{
+				m_good = false;
+				return r;
+			}
+			wchar_t* p = wcschr(buf, L'\r');
+			if( ! p )
+			{
+				m_good = false;
+				return r;
+			}
+			len = p - buf;
+		}
+		else
+		{
+			std::wcin.getline(buf, sizeof(buf));
+			m_good = std::wcin.good();
+		}
+		int len2 = ::WideCharToMultiByte(CP_UTF8, 0, buf, len, buf2, sizeof(buf2), NULL, NULL);
+		return std::string(buf2, len2);
+#else
+		*this << m_prompt;
+		std::getline(std::cin, r);
+		m_good = std::cin.good();
+#endif
+		return r;
+	}
+	void unit_report(const std::string& id, const std::string& text)
+	{
+		*this << id << ": " << text << std::endl;
+	}
+	template<typename T>
+	UserInterface& operator<<(const T& x)
+	{
+#ifdef _WIN32
+		std::ostringstream ss;
+		ss << x;
+		printf("%s", ss.str().c_str());
+#else
+		std::cout << x;
+#endif
+		return *this;
+	}
+	// need non-template overload to accept std::endl
+	typedef std::ostream& (*ostream_manipulator)(std::ostream&);
+	UserInterface& operator<<(ostream_manipulator pf)
+	{
+		return operator<< <ostream_manipulator> (pf);
+	}
+private:
+	bool m_good;
+	std::string m_prompt;
+#ifdef _WIN32
+	UINT m_oldOutputCodePage;
+	HANDLE m_inputHandle;
+	bool m_inputIsFromConsole;
+#endif
+};
+
 template<class T>
 struct StringMatchHelper
 {
@@ -48,7 +176,7 @@ struct StringMatchHelper
 	const char* cmd;
 	inline bool matches(const std::string& s) const
 	{
-		return s == cmd;
+		return ieq(s, cmd);
 	}
 	inline bool execute(T* obj) const
 	{
@@ -92,9 +220,9 @@ public:
 		}
 		return false;
 	}
-	void report(const char* phrase)
+	void report(const std::string& phrase)
 	{
-		std::cout << name() << ": " << phrase << std::endl;
+		UserInterface::instance().unit_report(name(), phrase);
 	}
 	virtual void dump(std::ostream& s) const
 	{
@@ -103,7 +231,7 @@ public:
 private:
 	bool ping()
 	{
-		report("Still alive");
+		report(m_type + " ещё в строю");
 		return true;
 	}
 private:
@@ -218,74 +346,13 @@ public:
 	}
 	Unit* make(const std::string& name, const std::string& type, const std::string& army)
 	{
-#define MK(nm, cls) if(type == nm) return new cls(name, type, army);
+#define MK(nm, cls) if(ieq(type, nm)) return new cls(name, type, army);
 		MK("пехотинец", WalkingUnit);
 		MK("танк", WalkingUnit);
 		MK("вертолёт", FlyingUnit);
 #undef MK
 		throw std::runtime_error("Unknown unit type");
 	}
-};
-
-class UserInterface
-{
-private:
-	UserInterface()
-		: m_good(true)
-	{
-#ifdef _WIN32
-		// Save old codepage and set new code page to UTF-8
-		m_oldInputCodePage = ::GetConsoleCP();
-		m_oldOutputCodePage = ::GetConsoleOutputCP();
-		::SetConsoleCP(65001);
-		::SetConsoleOutputCP(65001);
-	}
-	~UserInterface()
-	{
-		::SetConsoleCP(m_oldInputCodePage);
-		::SetConsoleOutputCP(m_oldOutputCodePage);
-#endif /* _WIN32 */
-	}
-public:
-	static UserInterface& instance()
-	{
-		static UserInterface self;
-		return self;
-	}
-	bool good() const
-	{
-		return m_good;
-	}
-	void prompt(const char* prompt)
-	{
-		m_prompt = prompt;
-	}
-	std::string get_command()
-	{
-		std::string r;
-#ifdef HAVE_READLINE
-		char* p = readline(m_prompt.c_str());
-		if(p)
-		{
-			r = p;
-			free(p);
-		}
-		else
-			m_good = false;
-#else
-		std::cout << m_prompt;
-		std::cout.flush();
-		std::getline(std::cin, r);
-		m_good = std::cin.good();
-#endif
-		return r;
-	}
-private:
-	bool m_good;
-	std::string m_prompt;
-#ifdef _WIN32
-	UINT m_oldInputCodePage, m_oldOutputCodePage;
-#endif
 };
 
 class Tokenizer
@@ -323,7 +390,7 @@ public:
 	bool parse(const std::string& s)
 	{
 		std::vector< std::string > cmd = Tokenizer(s).all();
-		if(cmd[0] == "и" && cmd.size() == 2)
+		if(ieq(cmd[0], "и") && cmd.size() == 2)
 		{
 			m_cmd = cmd[1];
 			return true;
@@ -332,18 +399,18 @@ public:
 			m_name = m_type = m_army = m_cmd = "";
 		if(cmd.size() == 2)
 		{
-			if(cmd[0] != "все")
+			if(! (ieq(cmd[0], "все") || ieq(cmd[0], "all")))
 				m_name = cmd[0];
 			m_cmd = cmd[1];
 			return true;
 		}
-		if(cmd.size() == 3 && cmd[0] == "армия")
+		if(ieq(cmd[0], "армия") && cmd.size() == 3)
 		{
 			m_army = cmd[1];
 			m_cmd = cmd[2];
 			return true;
 		}
-		if(cmd.size() == 3 && cmd[0] == "каждый")
+		if(ieq(cmd[0], "каждый") && cmd.size() == 3)
 		{
 			m_type = cmd[1];
 			m_cmd = cmd[2];
@@ -384,16 +451,17 @@ public:
 	}
 	void load(const std::string& filename) /* XXX TODO: check unicode filenames on win32 XXX */
 	{
-		std::ifstream f(filename.c_str());
+		std::ifstream f(filename);
+		if(! f.is_open())
+			throw std::system_error(errno, std::system_category(), filename.c_str());
 		size_t pos = filename.find('.');
 		load(f, filename.substr(0, pos));
 	}
 	void load(std::istream& s, const std::string& army)
 	{
-		while(s.good())
+		std::string line;
+		while(std::getline(s, line))
 		{
-			std::string line;
-			std::getline(s, line);
 			if(line.length() < 2 || line[0] == '#')
 				continue;
 			Tokenizer t(line);
@@ -409,9 +477,9 @@ public:
 	void run()
 	{
 		UserInterface& ui = UserInterface::instance();
-		std::cout << "Welcome!" << std::endl;
+		ui << "Welcome!" << std::endl << "故兵貴勝，不貴久。" << std::endl;;
 		help();
-		ui.prompt("Command? > ");
+		ui.prompt("Команда? > ");
 
 		Command cmd;
 		while(ui.good())
@@ -419,12 +487,12 @@ public:
 			std::string s = ui.get_command();
 			if(s.empty())
 				continue;
-			if(s == "?")
+			if(s == "?" || ieq(s, "help") || ieq(s, "wtf"))
 			{
 				help();
 				continue;
 			}
-			if(s == "q" || s == "quit" || s == "exit" || s == "выход")
+			if(ieq(s, "q") || ieq(s, "quit") || ieq(s, "exit") || ieq(s, "выход"))
 				break;
 			// assume regular command
 			if(cmd.parse(s))
@@ -442,7 +510,7 @@ public:
 				std::cerr << "Bad command '" << s << "'" << std::endl;
 		}
 
-		std::cout << "Good bye!" << std::endl;
+		ui << "Good bye!" << std::endl;
 	}
 	void dump(std::ostream& s) const
 	{
@@ -456,11 +524,11 @@ public:
 protected:
 	void help()
 	{
-		std::cout << "General commands:" << std::endl
-			<< "? for help" << std::endl
-			<< "exit to leave this excellent game" << std::endl
+		UserInterface::instance() << "Общие команды:" << std::endl
+			<< "'?' или 'help' - эта небольшая подсказка" << std::endl
+			<< "'exit' или 'выход' или просто 'q' - он самый, выход" << std::endl
 			<< std::endl;
-		std::cout << "Unit controlling commands:" << std::endl
+		UserInterface::instance() << "Управление войсками:" << std::endl
 			<< "<имя> <команда> - управление одной боевой единицей" << std::endl
 			<< "все <команда> - скомандовать всем бевым единицам" << std::endl
 			<< "армия <армия> <команда> - скомандовать всей армии <армия>" << std::endl
