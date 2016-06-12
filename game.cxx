@@ -6,6 +6,7 @@
 #include <memory>
 #include <set>
 #include <sstream>
+#include <system_error>
 #ifdef HAVE_READLINE
 # include <readline/readline.h>
 # include <readline/history.h>
@@ -366,16 +367,17 @@ public:
 	}
 	void load(const std::string& filename) /* XXX TODO: check unicode filenames on win32 XXX */
 	{
-		std::ifstream f(filename.c_str());
+		std::ifstream f(filename);
+		if(! f.is_open())
+			throw std::system_error(errno, std::system_category(), filename.c_str());
 		size_t pos = filename.find('.');
 		load(f, filename.substr(0, pos));
 	}
 	void load(std::istream& s, const std::string& army)
 	{
-		while(s.good())
+		std::string line;
+		while(std::getline(s, line))
 		{
-			std::string line;
-			std::getline(s, line);
 			if(line.length() < 2 || line[0] == '#')
 				continue;
 			Tokenizer t(line);
