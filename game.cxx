@@ -49,6 +49,68 @@ bool ieq(const std::string& s1, const std::string& s2)
 	return res == 0;
 }
 
+class UserInterface
+{
+private:
+	UserInterface()
+		: m_good(true)
+	{
+	}
+public:
+	static UserInterface& instance()
+	{
+		static UserInterface self;
+		return self;
+	}
+	bool good() const
+	{
+		return m_good;
+	}
+	void prompt(const char* prompt)
+	{
+		m_prompt = prompt;
+	}
+	std::string get_command()
+	{
+		std::string r;
+#ifdef HAVE_READLINE
+		char* p = readline(m_prompt.c_str());
+		if(p)
+		{
+			r = p;
+			free(p);
+		}
+		else
+			m_good = false;
+#else
+		std::cout << m_prompt;
+		std::cout.flush();
+		std::getline(std::cin, r);
+		m_good = std::cin.good();
+#endif
+		return r;
+	}
+	void unit_report(const std::string& id, const std::string& text)
+	{
+		*this << id << ": " << text << std::endl;
+	}
+	template<typename T>
+	UserInterface& operator<<(const T& x)
+	{
+		std::cout << x;
+		return *this;
+	}
+	// need non-template overload to accept std::endl
+	typedef std::ostream& (*ostream_manipulator)(std::ostream&);
+	UserInterface& operator<<(ostream_manipulator pf)
+	{
+		return operator<< <ostream_manipulator> (pf);
+	}
+private:
+	bool m_good;
+	std::string m_prompt;
+};
+
 template<class T>
 struct StringMatchHelper
 {
@@ -100,9 +162,9 @@ public:
 		}
 		return false;
 	}
-	void report(const char* phrase)
+	void report(const std::string& phrase)
 	{
-		std::cout << name() << ": " << phrase << std::endl;
+		UserInterface::instance().unit_report(name(), phrase);
 	}
 	virtual void dump(std::ostream& s) const
 	{
@@ -111,7 +173,7 @@ public:
 private:
 	bool ping()
 	{
-		report("Still alive");
+		report(m_type + " ещё в строю");
 		return true;
 	}
 private:
@@ -235,52 +297,6 @@ public:
 	}
 };
 
-class UserInterface
-{
-private:
-	UserInterface()
-		: m_good(true)
-	{
-	}
-public:
-	static UserInterface& instance()
-	{
-		static UserInterface self;
-		return self;
-	}
-	bool good() const
-	{
-		return m_good;
-	}
-	void prompt(const char* prompt)
-	{
-		m_prompt = prompt;
-	}
-	std::string get_command()
-	{
-		std::string r;
-#ifdef HAVE_READLINE
-		char* p = readline(m_prompt.c_str());
-		if(p)
-		{
-			r = p;
-			free(p);
-		}
-		else
-			m_good = false;
-#else
-		std::cout << m_prompt;
-		std::cout.flush();
-		std::getline(std::cin, r);
-		m_good = std::cin.good();
-#endif
-		return r;
-	}
-private:
-	bool m_good;
-	std::string m_prompt;
-};
-
 class Tokenizer
 {
 public:
@@ -325,7 +341,7 @@ public:
 			m_name = m_type = m_army = m_cmd = "";
 		if(cmd.size() == 2)
 		{
-			if(! ieq(cmd[0], "все"))
+			if(! (ieq(cmd[0], "все") || ieq(cmd[0], "all")))
 				m_name = cmd[0];
 			m_cmd = cmd[1];
 			return true;
@@ -403,7 +419,7 @@ public:
 	void run()
 	{
 		UserInterface& ui = UserInterface::instance();
-		std::cout << "Welcome!" << std::endl;
+		ui << "Welcome!" << std::endl << "故兵貴勝，不貴久。" << std::endl;;
 		help();
 		ui.prompt("Команда? > ");
 
@@ -436,7 +452,7 @@ public:
 				std::cerr << "Bad command '" << s << "'" << std::endl;
 		}
 
-		std::cout << "Good bye!" << std::endl;
+		ui << "Good bye!" << std::endl;
 	}
 	void dump(std::ostream& s) const
 	{
@@ -450,11 +466,11 @@ public:
 protected:
 	void help()
 	{
-		std::cout << "Общие команды:" << std::endl
+		UserInterface::instance() << "Общие команды:" << std::endl
 			<< "'?' или 'help' - эта небольшая подсказка" << std::endl
 			<< "'exit' или 'выход' или просто 'q' - он самый, выход" << std::endl
 			<< std::endl;
-		std::cout << "Управление войсками:" << std::endl
+		UserInterface::instance() << "Управление войсками:" << std::endl
 			<< "<имя> <команда> - управление одной боевой единицей" << std::endl
 			<< "все <команда> - скомандовать всем бевым единицам" << std::endl
 			<< "армия <армия> <команда> - скомандовать всей армии <армия>" << std::endl
