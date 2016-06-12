@@ -12,6 +12,13 @@
 # include <readline/history.h>
 #endif
 
+#include <locale>
+#include <iostream>
+#include <boost/locale.hpp>
+#include <boost/locale/collator.hpp>
+
+
+
 /*
  *
  * Тут "чистый" C++11, никакого boostа. Причина тому - отсутствие опыта
@@ -39,6 +46,16 @@
  *
  */
 
+bool ieq(const std::string& s1, const std::string& s2)
+{
+	using namespace std;
+	using namespace boost::locale;
+	static generator gen;
+	static locale loc = gen("ru_RU.UTF-8");
+	int res = use_facet<collator<char> >(loc).compare(collator_base::primary, s1, s2);
+	return res == 0;
+}
+
 template<class T>
 struct StringMatchHelper
 {
@@ -46,7 +63,7 @@ struct StringMatchHelper
 	const char* cmd;
 	inline bool matches(const std::string& s) const
 	{
-		return s == cmd;
+		return ieq(s, cmd);
 	}
 	inline bool execute(T* obj) const
 	{
@@ -216,7 +233,7 @@ public:
 	}
 	Unit* make(const std::string& name, const std::string& type, const std::string& army)
 	{
-#define MK(nm, cls) if(type == nm) return new cls(name, type, army);
+#define MK(nm, cls) if(ieq(type, nm)) return new cls(name, type, army);
 		MK("пехотинец", WalkingUnit);
 		MK("танк", WalkingUnit);
 		MK("вертолёт", FlyingUnit);
@@ -306,7 +323,7 @@ public:
 	bool parse(const std::string& s)
 	{
 		std::vector< std::string > cmd = Tokenizer(s).all();
-		if(cmd[0] == "и" && cmd.size() == 2)
+		if(ieq(cmd[0], "и") && cmd.size() == 2)
 		{
 			m_cmd = cmd[1];
 			return true;
@@ -315,18 +332,18 @@ public:
 			m_name = m_type = m_army = m_cmd = "";
 		if(cmd.size() == 2)
 		{
-			if(cmd[0] != "все")
+			if(! ieq(cmd[0], "все"))
 				m_name = cmd[0];
 			m_cmd = cmd[1];
 			return true;
 		}
-		if(cmd.size() == 3 && cmd[0] == "армия")
+		if(ieq(cmd[0], "армия") && cmd.size() == 3)
 		{
 			m_army = cmd[1];
 			m_cmd = cmd[2];
 			return true;
 		}
-		if(cmd.size() == 3 && cmd[0] == "каждый")
+		if(ieq(cmd[0], "каждый") && cmd.size() == 3)
 		{
 			m_type = cmd[1];
 			m_cmd = cmd[2];
@@ -408,7 +425,7 @@ public:
 				help();
 				continue;
 			}
-			if(s == "q" || s == "quit" || s == "exit" || s == "выход")
+			if(ieq(s, "q") || ieq(s, "quit") || ieq(s, "exit") || ieq(s, "выход"))
 				break;
 			// assume regular command
 			if(cmd.parse(s))
