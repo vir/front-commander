@@ -13,8 +13,8 @@
 #endif
 #ifdef _WIN32
 # include <Windows.h>
-# include    <io.h>      // _setmode, _fileno
-# include    <fcntl.h>   // _O_U8TEXT
+# include <io.h>      // _setmode, _fileno
+# include <fcntl.h>   // _O_U8TEXT
 #endif
 #ifdef HAVE_BOOST_LOCALE
 # include <locale>
@@ -23,6 +23,10 @@
 # ifdef _WIN32
 #  pragma comment(lib, "libboost_system-vc140-mt-s-1_61.lib") // вот же ж блин...
 # endif
+#endif
+#if HAVE_BOOST_FILESYSTEM
+# include <boost/filesystem.hpp>
+# include <boost/filesystem/fstream.hpp>
 #endif
 
 /*
@@ -452,7 +456,16 @@ public:
 	~Game()
 	{
 	}
-	void load(const std::string& filename) /* XXX TODO: check unicode filenames on win32 XXX */
+#if HAVE_BOOST_FILESYSTEM
+	void load(const boost::filesystem::path& p)
+	{
+		boost::filesystem::ifstream f(p);
+		/*if(! f.is_open())
+			throw std::system_error(errno, std::system_category(), filename.c_str());*/
+		load(f, p.stem().string()); // XXX check army name when filename contains unicode chars XXX */
+	}
+#else
+	void load(const std::string& filename) /* No unicode support */
 	{
 		std::ifstream f(filename);
 		if(! f.is_open())
@@ -460,6 +473,7 @@ public:
 		size_t pos = filename.find('.');
 		load(f, filename.substr(0, pos));
 	}
+#endif
 	void load(std::istream& s, const std::string& army)
 	{
 		std::string line;
@@ -549,7 +563,13 @@ static void usage(const char* err = nullptr)
 	std::ostream& s = err ? std::clog : std::cout;
 	if(err)
 		s << err << std::endl;
-	s << "Usage:\n\tgame -h\t--- this help\n\tgame file1.army file2.army\t--- load army files\n\n";
+	s << "Usage:" << std::endl
+		<< "\tgame -h\t--- this help" << std::endl
+		<< "\tgame [-v] file1.army file2.army\t--- load army files" << std::endl
+#if HAVE_BOOST_FILESYSTEM
+		<< "\tgame [-v]\t--- load all *.army files in current directory" << std::endl
+#endif
+		<< std::endl;
 }
 int main(int argc, const char* argv[])
 {
@@ -589,8 +609,23 @@ int main(int argc, const char* argv[])
 		}
 		else
 		{
+#if HAVE_BOOST_FILESYSTEM
+			using namespace boost::filesystem;
+			directory_iterator it(".");
+			directory_iterator end;
+			for(; it != end; ++it)
+			{
+				if(! boost::filesystem::is_regular_file(it->status()))
+					continue;
+				std::string fn = it->path().filename().string();
+				if(fn.length() < 5 || fn.substr(fn.length() - 5) != ".army")
+					continue;
+				game.load(it->path());
+			}
+#else
 			usage("No armys to load");
 			return 1;
+#endif
 		}
 		if(verbose)
 			game.dump(std::cout);

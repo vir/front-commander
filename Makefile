@@ -9,10 +9,14 @@ ifneq (,$(wildcard /usr/include/boost/locale.hpp))
 CXXFLAGS+=-DHAVE_BOOST_LOCALE
 LDFLAGS+=-lboost_locale
 endif
+ifneq (,$(wildcard /usr/include/boost/filesystem.hpp))
+CXXFLAGS+=-DHAVE_BOOST_FILESYSTEM
+LDFLAGS+=-lboost_filesystem -lboost_system
+endif
 
 all: game
 
-.SUFFIXES: .cxx .so
+.SUFFIXES: .cxx
 
 .cxx.o:
 	g++ $(CXXFLAGS) -c -o $*.o $<
@@ -23,18 +27,7 @@ game: game.o
 #---------------------------------------------------------------------------
 .PHONY: clean
 clean:
-	-rm -f *.o .depend core
-
-tgz: clean
-	rm -f ${TARNAME}
-	tar czf --exclude '*.o' ${TARNAME} *
-
-.depend:
-	gcc -MM -MG *.c *.cxx >.depend
-
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
+	-rm -f *.o core
 
 # vim: ft=make
 
