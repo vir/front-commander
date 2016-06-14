@@ -27,6 +27,7 @@
 #if HAVE_BOOST_FILESYSTEM
 # include <boost/filesystem.hpp>
 # include <boost/filesystem/fstream.hpp>
+# include <codecvt>
 #endif
 
 /*
@@ -460,9 +461,10 @@ public:
 	void load(const boost::filesystem::path& p)
 	{
 		boost::filesystem::ifstream f(p);
-		/*if(! f.is_open())
-			throw std::system_error(errno, std::system_category(), filename.c_str());*/
-		load(f, p.stem().string()); // XXX check army name when filename contains unicode chars XXX */
+		if(! f.is_open())
+			throw std::system_error(errno, std::system_category(), p.string().c_str());
+		std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+		load(f, conv.to_bytes(p.stem().wstring()));
 	}
 #else
 	void load(const std::string& filename) /* No unicode support */
@@ -628,7 +630,11 @@ int main(int argc, const char* argv[])
 #endif
 		}
 		if(verbose)
-			game.dump(std::cout);
+		{
+			std::ostringstream ss;
+			game.dump(ss);
+			UserInterface::instance() << ss.str();
+		}
 		game.run();
 	}
 	catch(std::exception& e)

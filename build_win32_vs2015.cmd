@@ -26,5 +26,5 @@ set BOOST=C:\tmp\boost_1_61_0
 
 call %VSDIR%\vcvarsall.bat x86
 
-cl /EHsc /I%BOOST% /DHAVE_BOOST_LOCALE game.cxx /link /LIBPATH:%BOOST%\stage\lib
+cl /EHsc /I%BOOST% /DHAVE_BOOST_LOCALE /DHAVE_BOOST_FILESYSTEM game.cxx /link /LIBPATH:%BOOST%\stage\lib
 
